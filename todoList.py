@@ -189,12 +189,13 @@ class Ui_MainWindow(object):
         c = conn.cursor()
         c.execute("SELECT * FROM todo_list")
         records = c.fetchall()
-        records = ast.literal_eval(records[0][0])
         # Commit the changes
         conn.commit()
         conn.close()
-        self.projects = records
-        self.readItemsFromDB()
+        if len(records) != 0:
+            records = ast.literal_eval(records[0][0])
+            self.projects = records
+            self.readItemsFromDB()
 
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
