@@ -5,10 +5,22 @@ Version: 3
 Author: Paul Adrian A. Reyes
 Date: June 20, 2022
 """
-
+import ast
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtWidgets import QListWidgetItem
+import sqlite3
+
+# Create a database/connect
+conn = sqlite3.connect("myProjects.db")
+# Create cursor
+c = conn.cursor()
+# Create a table
+c.execute("""CREATE TABLE if not exists todo_list(
+todo_item text)""")
+# Commit the changes
+conn.commit()
+conn.close()
 
 
 class Ui_MainWindow(object):
@@ -161,13 +173,28 @@ class Ui_MainWindow(object):
         self.statusbar.setObjectName("statusbar")
         MainWindow.setStatusBar(self.statusbar)
         # Save
-        self.actionSave = QtWidgets.QAction(MainWindow)
+        self.actionSave = QtWidgets.QAction(MainWindow, triggered=lambda: self.save())
         self.actionSave.setObjectName("actionSave")
         self.menuFile.addAction(self.actionSave)
         self.menubar.addAction(self.menuFile.menuAction())
 
         self.retranslateUi(MainWindow)
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
+        self.grabAll()
+
+    def grabAll(self):
+        # Create a database/connect
+        conn = sqlite3.connect("myProjects.db")
+        # Create cursor
+        c = conn.cursor()
+        c.execute("SELECT * FROM todo_list")
+        records = c.fetchall()
+        records = ast.literal_eval(records[0][0])
+        # Commit the changes
+        conn.commit()
+        conn.close()
+        self.projects = records
+        self.readItemsFromDB()
 
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
@@ -179,6 +206,7 @@ class Ui_MainWindow(object):
         self.pushButton_clear.setText(_translate("MainWindow", "Clear"))
         self.menuFile.setTitle(_translate("MainWindow", "File"))
         self.actionSave.setText(_translate("MainWindow", "Save"))
+        self.actionSave.setShortcut(_translate("TodoList_App", "Ctrl+S"))
 
     # Functions
 
@@ -189,17 +217,27 @@ class Ui_MainWindow(object):
         for item in allItems:
             listType.addItem(item)
 
+    def readItemsFromDB(self):
+        for project, items in self.projects.items():
+            project = QListWidgetItem(project)
+            self.listWidget_ProjList.addItem(project)  # Append project to Project list
+            self.listWidget_ProjList.setCurrentItem(project)
+            self.readItems(items, self.listWidget_ItemList)
+
     def addItem(self):
         """ Adds item to list
         """
-        projectName = self.listWidget_ProjList.currentItem().text()  # Grab the current/selected item in projects
-        allItems = self.projects.get(projectName)  # Grab the array item of the project
+        # print("ADDED")
         item = self.lineEdit_LineItem.text()  # Grabs the item in line item box
-        allItems.append(item)  # Add Item to list
-        # self.listWidget_ItemList.addItem(item)
-        self.readItems(allItems, self.listWidget_ItemList)  # Reads the contents of the project
-        self.lineEdit_LineItem.setText("")  # Clear item box
-        self.projects[projectName] = allItems  # Update project Items
+        if item != "":
+            projectName = self.listWidget_ProjList.currentItem().text()  # Grab the current/selected item in projects
+            allItems = self.projects.get(projectName)  # Grab the array item of the project
+            allItems.append(item)  # Add Item to list
+            self.readItems(allItems, self.listWidget_ItemList)  # Reads the contents of the project
+            self.lineEdit_LineItem.setText("")  # Clear item box
+            self.projects[projectName] = allItems  # Update project Items
+        else:
+            print("Please insert something")
 
     def deleteItem(self):
         """Deletes Item in list
@@ -210,6 +248,7 @@ class Ui_MainWindow(object):
         item = self.listWidget_ItemList.takeItem(clicked).text()  # Delete selected row
         allItems.remove(item)
         self.projects[projectName] = allItems  # Update project Items
+        self.clearAllSelection()
 
     def clearAll(self):
         """Clears all items in list
@@ -218,28 +257,69 @@ class Ui_MainWindow(object):
         projectName = self.listWidget_ProjList.currentItem().text()  # Grab the current/selected item in projects
         allItems = []  # Create an empty list
         self.projects[projectName] = allItems  # Update project Items
+        self.clearAllSelection()
 
     def newProj(self):
         """Create a new project
         """
-        project = self.lineEdit_LineProj.text()  # Grabs the item in the project item box
-        item = QListWidgetItem(project)
-        self.projects[item.text()] = []  # Create an empty array to hold items
-        self.listWidget_ProjList.addItem(item)  # Append project to Project list
-        self.listWidget_ProjList.setCurrentItem(item)
-        self.lineEdit_LineProj.setText("")  # Clear item box
+        try:
+            project = self.lineEdit_LineProj.text()  # Grabs the item in the project item box
+            if project != "":
+                item = QListWidgetItem(project)
+                self.projects[item.text()] = []  # Create an empty array to hold items
+                self.listWidget_ProjList.addItem(item)  # Append project to Project list
+                self.listWidget_ProjList.setCurrentItem(item)
+                self.getItem()
+                self.lineEdit_LineProj.setText("")  # Clear item box
+            else:
+                print("Please insert something")
+        except Exception as e:
+            print("ERROR IN NEW PROJECT")
+            print(e)
 
     def deleteProj(self):
         """Delete a project
         """
-        projectRow = self.listWidget_ProjList.currentRow()  # Grab Project Row
-        projectName = self.listWidget_ProjList.takeItem(projectRow).text()  # Get Project and remove
-        del self.projects[projectName]  # Delete project from dictionary
+        try:
+            projectRow = self.listWidget_ProjList.currentRow()  # Grab Project Row
+            projectName = self.listWidget_ProjList.takeItem(projectRow).text()  # Get Project and remove
+            del self.projects[projectName]  # Delete project from dictionary
+            self.clearAllSelection()
+            self.clearAll()
+        except Exception as e:
+            print(e)
 
     def getItem(self):
+        """Reads the contents of the Project
+        """
         projectName = self.listWidget_ProjList.currentItem().text()  # Grab the current/selected item in projects
-        allItems = self.projects.get(projectName)  # Grab the array item of the project
-        self.readItems(allItems, self.listWidget_ItemList)  # Reads the contents of the project
+        if projectName != "":
+            allItems = self.projects.get(projectName)  # Grab the array item of the project
+            self.readItems(allItems, self.listWidget_ItemList)  # Reads the contents of the project
+
+    def save(self):
+        """Saves to Database
+        """
+        # Create a database/connect
+        try:
+            conn = sqlite3.connect("myProjects.db")
+            # Create cursor
+            c = conn.cursor()
+            # Delete in Database
+            c.execute("DELETE FROM todo_list;", )
+            stringProjects = [str(self.projects)]
+            c.execute("INSERT INTO todo_list (todo_item) VALUES (?)", stringProjects)
+            # Commit the changes
+            conn.commit()
+            conn.close()
+            print("SUCCESS")
+        except Exception as e:
+            print("ERROR IN save")
+            print(e)
+
+    def clearAllSelection(self):
+        self.listWidget_ProjList.clearSelection()
+        self.listWidget_ItemList.clearSelection()
 
 
 if __name__ == "__main__":
